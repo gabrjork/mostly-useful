@@ -3,9 +3,15 @@
 library(writexl)
 library(GetBCBData)
 library(tidyverse)
+library(tsDyn)
+library(kableExtra)
 library(dplyr)
+library(gridExtra)
+library(tibble)
+library(tidyr)
 library(seasonal)
 library(beepr)
+llibrary(urca)
 library(lubridate)
 library(x13binary)
 library(ggplot2)
@@ -421,12 +427,12 @@ LOGDADOS_VAR_SA <- data.frame(
 View(LOGDADOS_VAR_SA)
 
 # Save the data frame to a CSV file
-write.csv2(LOGDADOS_VAR_SA, "LOGDADOS_VAR_SArevisado.csv", row.names = FALSE, fileEncoding = "UTF-8")
+write.csv2(LOGDADOS_VAR_SA, "LOGDADOS_VAR_SA.csv", row.names = FALSE, fileEncoding = "UTF-8")
 
 # ----- Plotando os dados ajustados e em LOG -----
 
 # Carrega os dados ajustados
-series_ajustadas <- read.csv("LOGDADOS_VAR_SArevisado.csv", sep = ";", dec = ",", fileEncoding = "UTF-8")
+series_ajustadas <- read.csv("LOGDADOS_VAR_SA.csv", sep = ";", dec = ",", fileEncoding = "UTF-8")
 View(series_ajustadas)
 
 # Garante que a coluna Trimestre está no formato Date
@@ -499,7 +505,7 @@ diff_data <- diff_data %>%
   select(Trimestre, starts_with("diff_"))
 
 # Cria um excel com as séries temporais em primeira diferença
-write_xlsx(diff_data, "diff_LOGDADOS_VAR_SArevisado.xlsx")
+write_xlsx(diff_data, "diff_LOGDADOS_VAR_SA.xlsx")
 
 # --- Atualiza a lista de variáveis para as diferenças ---
 diff_variables_to_plot <- paste0("diff_", variables_to_plot)
@@ -567,3 +573,211 @@ for (var in diff_variables_to_plot) {
 combined_diff_plot <- wrap_plots(diff_plot_list, ncol = 3)
 ggsave("all_time_series_diff_log.png", plot = combined_diff_plot, width = 15, height = 10)
 cat("Gráfico agregado das séries em diferença (diff log) salvo como 'all_time_series_diff_log.png'.\n")
+
+
+### ==== Testes de Raiz Unitária ==== ###
+
+# Define o diretório de trabalho e carrega o conjunto de dados
+setwd("C:/Users/gabri/OneDrive/Área de Trabalho/Acadêmico/Monografia - LOCAL/Elaboração")
+getwd()
+data <- read.csv("LOGDADOS_VAR_SA.csv", sep = ";", dec = ",")
+View(data) # Visualiza os dados
+
+# Definindo a coluna "Trimestre" como data
+data$Trimestre <- as.Date(paste0(data$Trimestre, "-01"))
+data$Trimestre <- as.Date(data$Trimestre)
+
+View(data) # Visualiza os dados
+print(names(data)) # Visualiza os nomes das colunas
+
+str(data)
+summary(data)
+
+## -- Criando as funções para aplicar os testes de raiz unitária
+
+# Função para aplicar o teste ADF e extrair estatísticas
+teste_adf <- function(x) {
+  adf <- ur.df(x, type = c("trend"), selectlags = c("AIC"))
+
+  if (adf@testreg$coefficients["tt", 4] > 0.05) {
+    adf <- ur.df(x, type = c("drift"), selectlags = c("AIC"))
+  }
+
+  if (adf@testreg$coefficients["(Intercept)", 4] > 0.05) {
+    adf <- ur.df(x, type = c("none"), selectlags = c("AIC"))
+  }
+
+  if (adf@teststat[1] > adf@cval[1, 3]) {
+    p_valor <- ""
+    Conclusao <- "Não Estacionário"
+  }
+  if (adf@teststat[1] <= adf@cval[1, 3]) {
+    p_valor <- "*"
+    Conclusao <- "Estacionário"
+  }
+  if (adf@teststat[1] <= adf@cval[1, 2]) {
+    p_valor <- "**"
+    Conclusao <- "Estacionário"
+  }
+  if (adf@teststat[1] <= adf@cval[1, 1]) {
+    p_valor <- "***"
+    Conclusao <- "Estacionário"
+  }
+
+  tibble(
+    ADF = paste(round(adf@teststat[1], 3), p_valor),
+    # c_val_1    = adf@cval[1,1],
+    # c_val_5    = adf@cval[1,2],
+    # c_val_10   = adf@cval[1,3],
+    Model_ADF = adf@model,
+    Conclusao_ADF = Conclusao
+  )
+}
+
+# Olhando os Testes Individualmente nos Dados
+
+# Aplicar o teste em todas as colunas
+resultado_adf <- data %>%
+  purrr::map_dfr(teste_adf, .id = "Série")
+
+print(resultado_adf)
+
+
+# Função para aplicar o teste PP e extrair estatísticas
+teste_pp <- function(x) {
+  pp <- ur.pp(x, model = c("trend"), type = "Z-tau", lags = "short")
+
+  if (pp@testreg$coefficients["trend", 4] > 0.05) {
+    pp <- ur.pp(x, model = c("constant"), type = "Z-tau", lags = "short")
+  }
+
+
+  if (pp@teststat[1] > pp@cval[1, 3]) {
+    p_valor <- ""
+    Conclusao <- "Não Estacionário"
+  }
+  if (pp@teststat[1] <= pp@cval[1, 3]) {
+    p_valor <- "*"
+    Conclusao <- "Estacionário"
+  }
+  if (pp@teststat[1] <= pp@cval[1, 2]) {
+    p_valor <- "**"
+    Conclusao <- "Estacionário"
+  }
+  if (pp@teststat[1] <= pp@cval[1, 1]) {
+    p_valor <- "***"
+    Conclusao <- "Estacionário"
+  }
+
+  tibble(
+    PP = paste(round(pp@teststat[1], 3), p_valor),
+    # c_val_1    = pp@cval[1,1],
+    # c_val_5    = pp@cval[1,2],
+    # c_val_10   = pp@cval[1,3],
+    Model_PP = pp@model,
+    Conclusao_PP = Conclusao
+  )
+}
+
+# Aplicar o teste em todas as colunas
+resultado_pp <- data %>%
+  purrr::map_dfr(teste_pp, .id = "Série")
+
+print(resultado_pp)
+
+
+# Função para aplicar o teste KPSS e extrair estatísticas
+teste_kpss <- function(x) {
+  # Como a função ur.kpss não reporta o p-valor da tendência
+  # determinística, iremos utilizar o teste PP para reportar
+  # e selecionar se o melhor modelo KPSS é com "mu"ou "tau".
+  kpss <- ur.kpss(x, type = "mu", lags = "short")
+  pp <- ur.pp(x, model = c("trend"), type = "Z-tau", lags = "short")
+
+  if (pp@testreg$coefficients["trend", 4] <= 0.05) {
+    kpss <- ur.kpss(x, type = "tau", lags = "short")
+  }
+
+  if (kpss@teststat[1] > kpss@cval[1]) {
+    p_valor <- ""
+    Conclusao <- "Não Estacionário"
+  }
+  if (kpss@teststat[1] <= kpss@cval[1]) {
+    p_valor <- "***"
+    Conclusao <- "Estacionário"
+  }
+  if (kpss@teststat[1] <= kpss@cval[2]) {
+    p_valor <- "**"
+    Conclusao <- "Estacionário"
+  }
+  if (kpss@teststat[1] <= kpss@cval[4]) {
+    p_valor <- "*"
+    Conclusao <- "Estacionário"
+  }
+
+  tibble(
+    KPSS = paste(round(kpss@teststat, 3), p_valor),
+    # c_val_1     = kpss@cval[1,1],
+    # c_val_5     = kpss@cval[1,2],
+    # c_val_10    = kpss@cval[1,3],
+    Model_KPSS = kpss@type,
+    Conclusao_KPSS = Conclusao
+  )
+}
+
+# Aplicar o teste em todas as colunas
+resultado_kpss <- data %>%
+  purrr::map_dfr(teste_kpss, .id = "Série")
+
+print(resultado_kpss)
+
+
+# Unindo os resultados dos testes ADF, PP e KPSS
+Resultados <- resultado_adf %>%
+  full_join(resultado_pp, by = "Série") %>%
+  full_join(resultado_kpss, by = "Série")
+
+
+
+# ----- Cria um data frame apenas com as primeiras diferenças das variáveis (exceto Trimestre)
+data_diff <- data.frame(Trimestre = data$Trimestre[-1]) # Mantém a coluna de datas, excluindo a primeira linha
+
+for (col in setdiff(names(data), "Trimestre")) {
+  data_diff[[paste0("diff_", col)]] <- diff(data[[col]])
+}
+
+View(data_diff)
+write_xlsx(data_diff, "data_diff.xlsx") # Exporta o data frame de diferenças para Excel
+
+# Aplicar os testes de raiz unitária nas primeiras diferenças
+
+resultado_adf_DIFF <- data_diff %>%
+  purrr::map_dfr(teste_adf, .id = "Série")
+
+print(resultado_adf_DIFF)
+
+# Aplicar o teste em todas as colunas
+resultado_pp_DIFF <- data_diff %>%
+  purrr::map_dfr(teste_pp, .id = "Série")
+
+print(resultado_pp_DIFF)
+
+# Aplicar o teste em todas as colunas
+resultado_kpss_DIFF <- data_diff %>%
+  purrr::map_dfr(teste_kpss, .id = "Série")
+
+print(resultado_kpss_DIFF)
+
+# Unindo os resultados dos testes ADF, PP e KPSS
+Resultados_diff <- resultado_adf_DIFF %>%
+  full_join(resultado_pp_DIFF, by = "Série") %>%
+  full_join(resultado_kpss_DIFF, by = "Série")
+
+
+# Cria uma lista nomeada com os data frames
+lista_resultados <- list(
+  "Nível" = Resultados,
+  "Diferença" = Resultados_diff
+)
+
+write_xlsx(lista_resultados, "Resultados_Teste_Raiz_Unitaria.xlsx")
