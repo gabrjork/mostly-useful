@@ -376,13 +376,92 @@ print(head(tabela_consolidada$item, 10))
 print("Últimos 10 itens:")
 print(tail(tabela_consolidada$item, 10))
 
-# ====================== Exportação completa incluindo tabela consolidada ========================
+# ====================== Criando números-índices (base jan-22 = 100) ========================
+
+print("\n=== CRIANDO NÚMEROS-ÍNDICES ===")
+
+# Função para calcular números-índices
+calcular_numeros_indices <- function(tabela_dados, base_data = "2022-01-01") {
+  # Criando cópia da tabela
+  tabela_indices <- tabela_dados
+  
+  # Encontrando a posição da coluna base
+  if(!base_data %in% names(tabela_dados)) {
+    print(paste("AVISO: Data base", base_data, "não encontrada. Usando primeira data disponível."))
+    base_data <- names(tabela_dados)[2]  # Segunda coluna (primeira é 'item')
+  }
+  
+  # Para cada linha (item), calcular o índice acumulado
+  for(i in 1:nrow(tabela_indices)) {
+    # Extraindo apenas as colunas de datas (excluindo 'item')
+    variacoes <- as.numeric(tabela_dados[i, -1])
+    names(variacoes) <- names(tabela_dados)[-1]
+    
+    # Encontrando a posição da data base
+    base_pos <- which(names(variacoes) == base_data)
+    
+    if(length(base_pos) == 0) {
+      # Se não encontrar a data base, usar a primeira disponível
+      base_pos <- 1
+    }
+    
+    # Calculando índices acumulados
+    indices <- numeric(length(variacoes))
+    indices[base_pos] <- 100  # Base = 100
+    
+    # Calculando para frente (após a base)
+    if(base_pos < length(variacoes)) {
+      for(j in (base_pos + 1):length(variacoes)) {
+        if(!is.na(variacoes[j]) && !is.na(indices[j-1])) {
+          indices[j] <- indices[j-1] * (1 + variacoes[j]/100)
+        } else {
+          indices[j] <- NA
+        }
+      }
+    }
+    
+    # Calculando para trás (antes da base)
+    if(base_pos > 1) {
+      for(j in (base_pos - 1):1) {
+        if(!is.na(variacoes[j+1]) && !is.na(indices[j+1])) {
+          indices[j] <- indices[j+1] / (1 + variacoes[j+1]/100)
+        } else {
+          indices[j] <- NA
+        }
+      }
+    }
+    
+    # Substituindo na tabela (arredondando para 2 casas decimais)
+    # CORREÇÃO: Atribuir coluna por coluna em vez de tentar atribuir o vetor inteiro
+    for(k in 1:length(indices)) {
+      tabela_indices[i, k + 1] <- round(indices[k], 2)  # k+1 porque primeira coluna é 'item'
+    }
+  }
+  
+  return(tabela_indices)
+}
+
+# Calculando números-índices para a tabela consolidada
+tabela_consolidada_indices <- calcular_numeros_indices(tabela_consolidada, "2022-01-01")
+
+# Tratamento especial para DIFUSÃO - copiar os valores originais
+pos_difusao <- which(tabela_consolidada_indices$item == "DIFUSAO")
+if(length(pos_difusao) > 0) {
+  print("Mantendo valores originais para DIFUSÃO")
+  tabela_consolidada_indices[pos_difusao, -1] <- tabela_consolidada[pos_difusao, -1]
+}
+
+View(tabela_consolidada_indices)
+print("=== NÚMEROS-ÍNDICES CALCULADOS (Base: Jan-2022 = 100) ===")
+
+# ====================== Exportação completa incluindo números-índices ========================
 
 # Exportando para Excel
 timestamp <- format(Sys.time(), "%Y%m%d")
 write_xlsx(
   list(
     "IPCA_Consolidado" = tabela_consolidada,
+    "IPCA_Indices" = tabela_consolidada_indices,
     "IPCA_Variacoes_SIDRA" = ipca_variacoes_transposta,
     "IPCA_Pesos_SIDRA" = ipca_pesos_transposta,
     "IPCA_SGS_com_Nucleos" = IPCASGS_com_nucleos,
@@ -393,7 +472,8 @@ write_xlsx(
 
 print(paste("Arquivo exportado:", paste0("IPCAs_", timestamp, ".xlsx")))
 print("Planilhas incluídas:")
-print("- IPCA_Consolidado: Tabela única com SIDRA + SGS + núcleos inseridos")
+print("- IPCA_Consolidado: Tabela única com SIDRA + SGS + núcleos inseridos (variações mensais)")
+print("- IPCA_Indices: Números-índices com base Jan-2022 = 100")
 print("- IPCA_Variacoes_SIDRA: Variações mensais de todos os itens (SIDRA)")
 print("- IPCA_Pesos_SIDRA: Pesos mensais de todos os itens (SIDRA)")
 print("- IPCA_SGS_com_Nucleos: Séries do SGS/BCB com núcleos inseridos")
