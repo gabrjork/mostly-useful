@@ -14,15 +14,33 @@ setwd(diretorio)
 getwd()
 
 
-# ==== Coletando dados da tabela 7060 - IPCA variação mensal e pesos
-tabela_7060 <- get_sidra(7060, api = "/t/7060/n1/all/v/63,66/p/last%2041/c315/all/d/v63%202,v66%204")
+# Puxar a tabela criando a data de forma dinâmica até o mês atual.
+#    Criamos um intervalo fechado que o pacote aceita.
+data_inicio <- "202201"
+data_fim <- format(Sys.Date(), "%Y%m")
+periodo_completo <- paste0(data_inicio, "-", data_fim)
+
+# Informar o usuário qual período está sendo usado
+print(paste("Buscando dados para o período:", periodo_completo))
+
+# 3. Fazer a chamada à API com o período dinâmico e fechado
+#    Note que agora o argumento 'period' recebe uma string como "202201-202507"
+tabela_7060 <- get_sidra(
+  x = 7060,
+  period = periodo_completo, # Usando o período que acabamos de criar
+  variable = c(63, 66),
+  classific = "c315",
+  geo = "Brazil"
+)
+
 View(tabela_7060)
 
-# Selecionando colunas relevantes incluindo código da variável
+# Selecionando colunas relevantes incluindo código da variável e código do item
 itens_7060 <- tabela_7060 %>%
   select(
     data = "Mês (Código)",
     variable = "Geral, grupo, subgrupo, item e subitem",
+    item_codigo = "Geral, grupo, subgrupo, item e subitem (Código)",
     variavel_codigo = "Variável (Código)",
     variavel_nome = "Variável",
     value = "Valor"
@@ -36,6 +54,101 @@ print("Códigos únicos das variáveis:")
 print(unique(itens_7060$variavel_codigo))
 print("Nomes únicos das variáveis:")
 print(unique(itens_7060$variavel_nome))
+
+# Criando mapeamento código-item para identificação
+mapeamento_codigo_item <- itens_7060 %>%
+  select(item_codigo, variable) %>%
+  distinct() %>%
+  arrange(item_codigo)
+
+print("=== MAPEAMENTO CÓDIGO-ITEM ===")
+print(mapeamento_codigo_item)
+
+# Lista de códigos fornecida pelo usuário para serviços subjacentes
+codigos_servicos_subjacentes <- c(
+  7432, # Aliment. fora do domicilio
+  7448, # Aluguel residencial
+  7449, # Condomínio
+  7453, # Mudança
+  7548, # Consertos e manutenção
+  7639, # Transporte escolar
+  7643, # Seguro voluntario de veículo
+  7647, # Conserto de automóvel
+  7648, # Estacionamento
+  107656, # Aluguel de veículo
+  7653, # Pintura de veículo
+  7685, # Médico
+  7686, # Dentista
+  12414, # Aparelho ortodontico
+  12435, # Fisioterapia
+  12436, # Psicologo
+  7690, # Serviços laboratoriais e hospitalares
+  7715, # Costureira
+  12421, # Manicure
+  47654, # Cabeleireiro e barbeiro
+  7721, # Depilação
+  7724, # Despachante
+  7727, # Serviço Bancário
+  47655, # Sobrancelha
+  7733, # Clube
+  47657, # Tratamento de animais (clínica)
+  47658, # Casa noturna
+  47661, # Serviço de higiene para animais
+  47662 # Cinema, teatro e concertos
+)
+
+# Lista de códigos para serviços intensivos em trabalho
+codigos_servicos_intensivos_trabalho <- c(
+  7685, # Médico
+  7686, # Dentista
+  12435, # Fisioterapia
+  12436, # Psicologo
+  7715, # Costureira
+  12421, # Manicure
+  47654, # Cabeleireiro e barbeiro
+  7724, # Despachante
+  47655, # Sobrancelha
+  107641, # Mão de obra
+  7720 # Empregado doméstico
+)
+
+# Identificando os nomes dos itens correspondentes aos códigos fornecidos
+itens_servicos_subjacentes_por_codigo <- mapeamento_codigo_item %>%
+  filter(item_codigo %in% as.character(codigos_servicos_subjacentes)) %>%
+  pull(variable)
+
+print("=== ITENS PARA NÚCLEO SERVIÇOS SUBJACENTES (POR CÓDIGO) ===")
+print("Códigos fornecidos:")
+print(codigos_servicos_subjacentes)
+print("Itens correspondentes encontrados:")
+print(itens_servicos_subjacentes_por_codigo)
+print(paste("Total de itens encontrados:", length(itens_servicos_subjacentes_por_codigo)))
+
+# Verificando se alguns códigos não foram encontrados
+codigos_nao_encontrados <- setdiff(as.character(codigos_servicos_subjacentes), mapeamento_codigo_item$item_codigo)
+if (length(codigos_nao_encontrados) > 0) {
+  print("Códigos não encontrados na base:")
+  print(codigos_nao_encontrados)
+}
+
+# Identificando os nomes dos itens para serviços intensivos em trabalho
+itens_servicos_intensivos_trabalho_por_codigo <- mapeamento_codigo_item %>%
+  filter(item_codigo %in% as.character(codigos_servicos_intensivos_trabalho)) %>%
+  pull(variable)
+
+print("=== ITENS PARA NÚCLEO SERVIÇOS INTENSIVOS EM TRABALHO (POR CÓDIGO) ===")
+print("Códigos fornecidos:")
+print(codigos_servicos_intensivos_trabalho)
+print("Itens correspondentes encontrados:")
+print(itens_servicos_intensivos_trabalho_por_codigo)
+print(paste("Total de itens encontrados:", length(itens_servicos_intensivos_trabalho_por_codigo)))
+
+# Verificando se alguns códigos não foram encontrados
+codigos_nao_encontrados_trabalho <- setdiff(as.character(codigos_servicos_intensivos_trabalho), mapeamento_codigo_item$item_codigo)
+if (length(codigos_nao_encontrados_trabalho) > 0) {
+  print("Códigos não encontrados na base (serviços intensivos trabalho):")
+  print(codigos_nao_encontrados_trabalho)
+}
 
 # Separando variações mensais (v=63) dos pesos (v=66) usando código da variável
 ipca_variacoes <- itens_7060 %>%
@@ -61,12 +174,16 @@ View(ipca_pesos)
 
 # Transformando para formato transposto (datas como colunas) preservando os nomes dos itens
 ipca_variacoes_transposta <- ipca_variacoes %>%
+  # Convertendo data para character para garantir compatibilidade
+  mutate(data = as.character(data)) %>%
   pivot_longer(cols = -data, names_to = "item", values_to = "variacao") %>%
   pivot_wider(names_from = data, values_from = variacao) %>%
   # Reordenando para ter o item como primeira coluna
   select(item, everything())
 
 ipca_pesos_transposta <- ipca_pesos %>%
+  # Convertendo data para character para garantir compatibilidade
+  mutate(data = as.character(data)) %>%
   pivot_longer(cols = -data, names_to = "item", values_to = "peso") %>%
   pivot_wider(names_from = data, values_from = peso) %>%
   # Reordenando para ter o item como primeira coluna
@@ -102,7 +219,7 @@ servicos_intensivos_trabalho <- c(
 # NÚCLEO INDUSTRIAIS SUBJACENTES - Bens industriais excluindo mais voláteis
 industriais_subjacentes <- c(
   "Artigos de residência",
-  "Vestuário", 
+  "Vestuário",
   "Equipamentos e manutenção da habitação",
   "Medicamentos",
   "Higiene pessoal"
@@ -121,34 +238,67 @@ encontrar_itens <- function(lista_itens, palavras_chave) {
 
 # Encontrando itens reais disponíveis para cada núcleo
 print("\n=== BUSCANDO ITENS PARA CADA NÚCLEO ===")
-print("SERVIÇOS SUBJACENTES:")
-servicos_subj_real <- encontrar_itens(ipca_variacoes_transposta$item, servicos_subjacentes)
-print("SERVIÇOS INTENSIVOS EM TRABALHO:")
-servicos_trab_real <- encontrar_itens(ipca_variacoes_transposta$item, servicos_intensivos_trabalho)
+
+# NÚCLEO SERVIÇOS SUBJACENTES - Usando códigos específicos fornecidos pelo usuário
+print("SERVIÇOS SUBJACENTES (por códigos específicos):")
+servicos_subj_real <- itens_servicos_subjacentes_por_codigo
+print(paste("Total de itens:", length(servicos_subj_real)))
+print("Itens incluídos:")
+if (length(servicos_subj_real) > 0) {
+  for (i in seq_len(min(10, length(servicos_subj_real)))) {
+    print(paste(" -", servicos_subj_real[i]))
+  }
+  if (length(servicos_subj_real) > 10) {
+    print(paste("... e mais", length(servicos_subj_real) - 10, "itens"))
+  }
+} else {
+  print("Nenhum item encontrado!")
+}
+
+# NÚCLEO SERVIÇOS INTENSIVOS EM TRABALHO - Usando códigos específicos
+print("SERVIÇOS INTENSIVOS EM TRABALHO (por códigos específicos):")
+servicos_trab_real <- itens_servicos_intensivos_trabalho_por_codigo
+print(paste("Total de itens:", length(servicos_trab_real)))
+print("Itens incluídos:")
+if (length(servicos_trab_real) > 0) {
+  for (i in seq_len(min(10, length(servicos_trab_real)))) {
+    print(paste(" -", servicos_trab_real[i]))
+  }
+  if (length(servicos_trab_real) > 10) {
+    print(paste("... e mais", length(servicos_trab_real) - 10, "itens"))
+  }
+} else {
+  print("Nenhum item encontrado!")
+}
+
 print("INDUSTRIAIS SUBJACENTES:")
 industriais_subj_real <- encontrar_itens(ipca_variacoes_transposta$item, industriais_subjacentes)
 
 print("=== COMPONENTES DOS NÚCLEOS ===")
-print("SERVIÇOS SUBJACENTES:")
-print(servicos_subj_real)
-print("\nSERVIÇOS INTENSIVOS EM TRABALHO:")
-print(servicos_trab_real)
+print("SERVIÇOS SUBJACENTES (baseado em códigos específicos):")
+print(paste("Quantidade:", length(servicos_subj_real)))
+print("Primeiros 10 itens:")
+print(head(servicos_subj_real, 10))
+
+print("\nSERVIÇOS INTENSIVOS EM TRABALHO (baseado em códigos específicos):")
+print(paste("Quantidade:", length(servicos_trab_real)))
+print("Primeiros 10 itens:")
+print(head(servicos_trab_real, 10))
+
 print("\nINDUSTRIAIS SUBJACENTES:")
 print(industriais_subj_real)
 
 # Verificando se há diferença entre os núcleos de serviços
 print("\n=== VERIFICAÇÃO DE DIFERENÇAS ===")
-print("Definições originais:")
-print(paste("Serviços Subjacentes:", paste(servicos_subjacentes, collapse = ", ")))
-print(paste("Serviços Intensivos Trabalho:", paste(servicos_intensivos_trabalho, collapse = ", ")))
+print("Ambos os núcleos de serviços agora usam códigos específicos")
 
 print("\nItens encontrados na base:")
-print(paste("Serviços Subjacentes encontrados:", paste(servicos_subj_real, collapse = ", ")))
-print(paste("Serviços Intensivos Trabalho encontrados:", paste(servicos_trab_real, collapse = ", ")))
+print(paste("Serviços Subjacentes encontrados:", length(servicos_subj_real), "itens específicos"))
+print(paste("Serviços Intensivos Trabalho encontrados:", length(servicos_trab_real), "itens específicos"))
 
 print("\nComparação:")
 print("Itens únicos em Serviços Subjacentes:")
-print(setdiff(servicos_subj_real, servicos_trab_real))
+print(paste("Total:", length(setdiff(servicos_subj_real, servicos_trab_real))))
 print("Itens únicos em Serviços Intensivos em Trabalho:")
 print(setdiff(servicos_trab_real, servicos_subj_real))
 print("Itens comuns aos dois núcleos:")
@@ -157,47 +307,6 @@ print(intersect(servicos_subj_real, servicos_trab_real))
 # Verificando se os vetores são realmente diferentes
 print(paste("Os vetores são idênticos?", identical(servicos_subj_real, servicos_trab_real)))
 
-# FORÇANDO DIFERENCIAÇÃO - Vou criar manualmente as diferenças
-print("\n=== FORÇANDO DIFERENCIAÇÃO MANUAL ===")
-
-# Primeiro, vamos ver se "Recreação e cultura" realmente existe
-recreacao_items <- ipca_variacoes_transposta$item[grepl("Recreação", ipca_variacoes_transposta$item, ignore.case = TRUE)]
-print(paste("Itens com 'Recreação':", paste(recreacao_items, collapse = ", ")))
-
-cultura_items <- ipca_variacoes_transposta$item[grepl("Cultura", ipca_variacoes_transposta$item, ignore.case = TRUE)]
-print(paste("Itens com 'Cultura':", paste(cultura_items, collapse = ", ")))
-
-# Criando os núcleos manualmente com diferenciação forçada
-print("\n=== CRIANDO NÚCLEOS COM DIFERENCIAÇÃO FORÇADA ===")
-
-# Núcleo Serviços Subjacentes - TODOS os itens encontrados
-servicos_subj_real_forcado <- unique(c(
-  ipca_variacoes_transposta$item[grepl("Serviços de saúde", ipca_variacoes_transposta$item, ignore.case = TRUE)],
-  ipca_variacoes_transposta$item[grepl("Educação", ipca_variacoes_transposta$item, ignore.case = TRUE)],
-  ipca_variacoes_transposta$item[grepl("Recreação", ipca_variacoes_transposta$item, ignore.case = TRUE)],
-  ipca_variacoes_transposta$item[grepl("Cultura", ipca_variacoes_transposta$item, ignore.case = TRUE)],
-  ipca_variacoes_transposta$item[grepl("Despesas pessoais", ipca_variacoes_transposta$item, ignore.case = TRUE)]
-))
-
-# Núcleo Serviços Intensivos em Trabalho - SEM recreação/cultura
-servicos_trab_real_forcado <- unique(c(
-  ipca_variacoes_transposta$item[grepl("Serviços de saúde", ipca_variacoes_transposta$item, ignore.case = TRUE)],
-  ipca_variacoes_transposta$item[grepl("Educação", ipca_variacoes_transposta$item, ignore.case = TRUE)],
-  ipca_variacoes_transposta$item[grepl("Despesas pessoais", ipca_variacoes_transposta$item, ignore.case = TRUE)]
-))
-
-print("Serviços Subjacentes (forçado):")
-print(servicos_subj_real_forcado)
-print("Serviços Intensivos Trabalho (forçado):")
-print(servicos_trab_real_forcado)
-
-print("\nDiferença forçada:")
-print(paste("Únicos em Subjacentes:", paste(setdiff(servicos_subj_real_forcado, servicos_trab_real_forcado), collapse = ", ")))
-print(paste("Únicos em Intensivos:", paste(setdiff(servicos_trab_real_forcado, servicos_subj_real_forcado), collapse = ", ")))
-
-# Sobrescrevendo as variáveis originais
-servicos_subj_real <- servicos_subj_real_forcado
-servicos_trab_real <- servicos_trab_real_forcado
 
 # ====================== Cálculo dos núcleos de inflação ========================
 
@@ -247,7 +356,10 @@ calcular_nucleo_ponderado <- function(variacoes_df, pesos_df, itens_selecionados
 }
 
 # Calculando os três núcleos
-print("\n=== CALCULANDO NÚCLEOS COM DIFERENCIAÇÃO FORÇADA ===")
+print("\n=== CALCULANDO NÚCLEOS DE INFLAÇÃO ===")
+print("Serviços Subjacentes: baseado em códigos específicos fornecidos pelo usuário")
+print("Serviços Intensivos em Trabalho: baseado em códigos específicos fornecidos pelo usuário")
+print("Industriais Subjacentes: baseado em busca por palavras-chave")
 
 nucleo_servicos_subjacentes <- calcular_nucleo_ponderado(
   ipca_variacoes_transposta,
@@ -300,10 +412,12 @@ IPCASGS <- GetBCBData::gbcbd_get_series(
 )
 
 colnames(IPCASGS)
-head(IPCASGS)
+tail(IPCASGS)
 
 # Transpondo a tabela: transformando datas em colunas e itens em linhas
 IPCASGS_transposta <- IPCASGS %>%
+  # Convertendo ref.date para o mesmo formato das datas do SIDRA
+  mutate(ref.date = as.character(ref.date)) %>%
   pivot_longer(cols = -ref.date, names_to = "item", values_to = "variacao") %>%
   pivot_wider(names_from = ref.date, values_from = variacao)
 
@@ -325,15 +439,15 @@ print(paste("Posição SERVICOS:", pos_servicos))
 print(paste("Posição INDUSTRIAIS:", pos_industriais))
 
 # Inserindo núcleos de serviços após SERVICOS
-if(length(pos_servicos) > 0) {
+if (length(pos_servicos) > 0) {
   # Extraindo os dois núcleos de serviços
-  nucleos_servicos <- nucleos_calculados[1:2, ]  # Primeiras 2 linhas são os núcleos de serviços
-  
+  nucleos_servicos <- nucleos_calculados[1:2, ] # Primeiras 2 linhas são os núcleos de serviços
+
   # Inserindo após a posição de SERVICOS
   IPCASGS_com_nucleos <- bind_rows(
-    IPCASGS_com_nucleos[1:pos_servicos, ],           # Linhas até SERVICOS (inclusive)
-    nucleos_servicos,                                 # Núcleos de serviços
-    IPCASGS_com_nucleos[(pos_servicos + 1):nrow(IPCASGS_com_nucleos), ]  # Resto das linhas
+    IPCASGS_com_nucleos[1:pos_servicos, ], # Linhas até SERVICOS (inclusive)
+    nucleos_servicos, # Núcleos de serviços
+    IPCASGS_com_nucleos[(pos_servicos + 1):nrow(IPCASGS_com_nucleos), ] # Resto das linhas
   )
 }
 
@@ -342,15 +456,15 @@ pos_industriais_nova <- which(IPCASGS_com_nucleos$item == "INDUSTRIAIS")
 print(paste("Nova posição INDUSTRIAIS:", pos_industriais_nova))
 
 # Inserindo núcleo industriais após INDUSTRIAIS
-if(length(pos_industriais_nova) > 0) {
+if (length(pos_industriais_nova) > 0) {
   # Extraindo o núcleo industrial
-  nucleo_industrial <- nucleos_calculados[3, ]  # Terceira linha é o núcleo industrial
-  
+  nucleo_industrial <- nucleos_calculados[3, ] # Terceira linha é o núcleo industrial
+
   # Inserindo após a posição de INDUSTRIAIS
   IPCASGS_com_nucleos <- bind_rows(
-    IPCASGS_com_nucleos[1:pos_industriais_nova, ],                    # Linhas até INDUSTRIAIS (inclusive)
-    nucleo_industrial,                                                 # Núcleo industrial
-    IPCASGS_com_nucleos[(pos_industriais_nova + 1):nrow(IPCASGS_com_nucleos), ]  # Resto das linhas
+    IPCASGS_com_nucleos[1:pos_industriais_nova, ], # Linhas até INDUSTRIAIS (inclusive)
+    nucleo_industrial, # Núcleo industrial
+    IPCASGS_com_nucleos[(pos_industriais_nova + 1):nrow(IPCASGS_com_nucleos), ] # Resto das linhas
   )
 }
 
@@ -364,8 +478,8 @@ print(IPCASGS_com_nucleos$item)
 # IPCA_SGS começará imediatamente abaixo da última linha de IPCA_Variacoes_SIDRA
 
 tabela_consolidada <- bind_rows(
-  ipca_variacoes_transposta,    # Dados do SIDRA primeiro
-  IPCASGS_com_nucleos          # Dados do SGS com núcleos em seguida
+  ipca_variacoes_transposta, # Dados do SIDRA primeiro
+  IPCASGS_com_nucleos # Dados do SGS com núcleos em seguida
 )
 
 View(tabela_consolidada)
@@ -384,60 +498,73 @@ print("\n=== CRIANDO NÚMEROS-ÍNDICES ===")
 calcular_numeros_indices <- function(tabela_dados, base_data = "2022-01-01") {
   # Criando cópia da tabela
   tabela_indices <- tabela_dados
-  
-  # Encontrando a posição da coluna base
-  if(!base_data %in% names(tabela_dados)) {
-    print(paste("AVISO: Data base", base_data, "não encontrada. Usando primeira data disponível."))
-    base_data <- names(tabela_dados)[2]  # Segunda coluna (primeira é 'item')
+
+  # Verificando as colunas de data disponíveis
+  colunas_data <- names(tabela_dados)[-1] # Excluindo coluna 'item'
+  print(paste("Primeiras 5 colunas de data:", paste(colunas_data[1:5], collapse = ", ")))
+
+  # Procurando pela data base exata ou a mais próxima de janeiro 2022
+  if (base_data %in% colunas_data) {
+    data_base_final <- base_data
+    print(paste("Data base encontrada:", data_base_final))
+  } else {
+    # Procurar por colunas que comecem com "2022-01"
+    jan_2022_cols <- colunas_data[grepl("^2022-01", colunas_data)]
+    if (length(jan_2022_cols) > 0) {
+      data_base_final <- jan_2022_cols[1]
+      print(paste("Usando data base mais próxima:", data_base_final))
+    } else {
+      # Usar a primeira coluna disponível
+      data_base_final <- colunas_data[1]
+      print(paste("AVISO: Janeiro 2022 não encontrado. Usando primeira data:", data_base_final))
+    }
   }
-  
+
   # Para cada linha (item), calcular o índice acumulado
-  for(i in 1:nrow(tabela_indices)) {
+  for (i in 1:nrow(tabela_indices)) {
     # Extraindo apenas as colunas de datas (excluindo 'item')
     variacoes <- as.numeric(tabela_dados[i, -1])
-    names(variacoes) <- names(tabela_dados)[-1]
-    
+    names(variacoes) <- colunas_data
+
     # Encontrando a posição da data base
-    base_pos <- which(names(variacoes) == base_data)
-    
-    if(length(base_pos) == 0) {
-      # Se não encontrar a data base, usar a primeira disponível
+    base_pos <- which(names(variacoes) == data_base_final)
+
+    if (length(base_pos) == 0) {
       base_pos <- 1
     }
-    
+
     # Calculando índices acumulados
     indices <- numeric(length(variacoes))
-    indices[base_pos] <- 100  # Base = 100
-    
+    indices[base_pos] <- 100 # Base = 100
+
     # Calculando para frente (após a base)
-    if(base_pos < length(variacoes)) {
-      for(j in (base_pos + 1):length(variacoes)) {
-        if(!is.na(variacoes[j]) && !is.na(indices[j-1])) {
-          indices[j] <- indices[j-1] * (1 + variacoes[j]/100)
+    if (base_pos < length(variacoes)) {
+      for (j in (base_pos + 1):length(variacoes)) {
+        if (!is.na(variacoes[j]) && !is.na(indices[j - 1])) {
+          indices[j] <- indices[j - 1] * (1 + variacoes[j] / 100)
         } else {
           indices[j] <- NA
         }
       }
     }
-    
+
     # Calculando para trás (antes da base)
-    if(base_pos > 1) {
-      for(j in (base_pos - 1):1) {
-        if(!is.na(variacoes[j+1]) && !is.na(indices[j+1])) {
-          indices[j] <- indices[j+1] / (1 + variacoes[j+1]/100)
+    if (base_pos > 1) {
+      for (j in (base_pos - 1):1) {
+        if (!is.na(variacoes[j + 1]) && !is.na(indices[j + 1])) {
+          indices[j] <- indices[j + 1] / (1 + variacoes[j + 1] / 100)
         } else {
           indices[j] <- NA
         }
       }
     }
-    
+
     # Substituindo na tabela (arredondando para 2 casas decimais)
-    # CORREÇÃO: Atribuir coluna por coluna em vez de tentar atribuir o vetor inteiro
-    for(k in 1:length(indices)) {
-      tabela_indices[i, k + 1] <- round(indices[k], 2)  # k+1 porque primeira coluna é 'item'
+    for (k in 1:length(indices)) {
+      tabela_indices[i, k + 1] <- round(indices[k], 2) # k+1 porque primeira coluna é 'item'
     }
   }
-  
+
   return(tabela_indices)
 }
 
@@ -446,7 +573,7 @@ tabela_consolidada_indices <- calcular_numeros_indices(tabela_consolidada, "2022
 
 # Tratamento especial para DIFUSÃO - copiar os valores originais
 pos_difusao <- which(tabela_consolidada_indices$item == "DIFUSAO")
-if(length(pos_difusao) > 0) {
+if (length(pos_difusao) > 0) {
   print("Mantendo valores originais para DIFUSÃO")
   tabela_consolidada_indices[pos_difusao, -1] <- tabela_consolidada[pos_difusao, -1]
 }
