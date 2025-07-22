@@ -95,7 +95,7 @@ plot_yield_curves_base <- function(RATES_xts, dates, legend_labels = NULL, color
        mat <- t(coredata(RATES_xts[valid_dates, ]))
        maturities <- colnames(RATES_xts)
 
-       par(bg = "#F2F2F2", family = "plusjakarta")
+       par(bg = "#F2F2F2", family = "plusjakarta", las = 1)
        matplot(
               x = seq_along(maturities),
               y = mat,
