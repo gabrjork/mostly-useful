@@ -5,7 +5,7 @@ from datetime import datetime
 import matplotlib.font_manager as fm
 
 # Configurar a fonte Plus Jakarta Sans
-font_path = "C:/Users/GabrielHenriqueMarti/AppData/Local/Microsoft/Windows/Fonts/PLUSJAKARTASANS-Regular.ttf"
+font_path = "[font path here]"
 prop = fm.FontProperties(fname=font_path)
 plt.rcParams['font.family'] = prop.get_name()
 
@@ -70,8 +70,8 @@ else:
     ax.yaxis.label.set_color('#595959')       # Cor do rótulo do eixo Y
 
     # Salvar como PNG com fundo transparente
-    plt.savefig(r'C:\Users\GabrielHenriqueMarti\Desktop\ETTJ\ettj_curva.png', dpi=300, bbox_inches='tight', transparent=True)
-    print("Gráfico salvo como 'C:\\Users\\GabrielHenriqueMarti\\Desktop\\ETTJ\\ettj_curva.png'")
+    plt.savefig(r'[path here]\ettj_curva.png', dpi=300, bbox_inches='tight', transparent=True)
+    print("Gráfico salvo como '[path here]\ettj_curva.png'")
     
     # Exibir gráfico
     plt.show()
