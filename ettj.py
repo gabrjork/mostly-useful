@@ -2,9 +2,15 @@ import pyettj
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
+import matplotlib.font_manager as fm
+
+# Configurar a fonte Plus Jakarta Sans
+font_path = "C:/Users/GabrielHenriqueMarti/AppData/Local/Microsoft/Windows/Fonts/PLUSJAKARTASANS-Regular.ttf"
+prop = fm.FontProperties(fname=font_path)
+plt.rcParams['font.family'] = prop.get_name()
 
 # Datas de interesse no formato correto (DD/MM/AAAA)
-datas = ["30/06/2025", "11/07/2025", "18/07/2025"]  # Voltando para as datas originais
+datas = ["30/06/2025", "11/07/2025", "21/07/2025"]  # Voltando para as datas originais
 
 # Criando um dicionário para armazenar as curvas de juros reais
 curvas = {}
@@ -53,6 +59,15 @@ else:
     # plt.title("Curva de Juros")  # Título removido
     plt.legend()
     plt.grid(False)  # Remove as linhas de grade
+    
+    # Configurar cores dos eixos e textos
+    ax.spines['bottom'].set_color('#595959')  # Cor do eixo X
+    ax.spines['left'].set_color('#595959')    # Cor do eixo Y
+    ax.spines['top'].set_color('none')        # Remove eixo superior
+    ax.spines['right'].set_color('none')      # Remove eixo direito
+    ax.tick_params(colors='#595959')          # Cor dos números dos eixos
+    ax.xaxis.label.set_color('#595959')       # Cor do rótulo do eixo X
+    ax.yaxis.label.set_color('#595959')       # Cor do rótulo do eixo Y
 
     # Salvar como PNG com fundo transparente
     plt.savefig(r'C:\Users\GabrielHenriqueMarti\Desktop\ETTJ\ettj_curva.png', dpi=300, bbox_inches='tight', transparent=True)
