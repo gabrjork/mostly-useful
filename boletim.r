@@ -51,7 +51,7 @@ cat("Iniciando coleta de dados de",
 tickers_yf <- c(
   "IBOV" = "^BVSP",
   "SP500" = "^GSPC",
-  "IFIX (Proxy)" = "IFIX.SA",
+  "IFIX (Proxy)" = "XFIX11.SA",
   "DXY" = "DX-Y.NYB",
   "IRF-M (Proxy)" = "IRFM11.SA",
   "IMA-B (Proxy)" = "IMAB11.SA"
@@ -358,7 +358,7 @@ grafico_ptax <- ggplot(
 print(grafico_ptax)
 showtext_opts(dpi = 300)
 
-ggsave("grafico_ptax.png",
+ggsave(filename = file.path(caminho_output, "grafico_ptax.png"),
         plot = grafico_ptax,
         bg = "transparent",
         width = 6,
@@ -418,7 +418,7 @@ grafico_dxy <- ggplot(
 print(grafico_dxy)
 showtext_opts(dpi = 300)
 
-ggsave("grafico_dxy.png", 
+ggsave(filename = file.path(caminho_output, "grafico_dxy.png"), 
         plot = grafico_dxy, 
         bg = "transparent", 
         width = 6, 
@@ -428,6 +428,3 @@ ggsave("grafico_dxy.png",
 
 ######## ======= Fim do Script ======= ########
 
-
-
-#### Tentativa de calendario economico #####
